@@ -92,7 +92,7 @@ docker compose up -d
 docker compose ps
 ```
 
-Ожидаемо поднимаются:
+После запуска должны быть эти контейнеры:
 
 - `dz8_ml_service` - FastAPI сервис
 - `dz8_prometheus` - сбор метрик
