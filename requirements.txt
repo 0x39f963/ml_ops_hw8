@@ -1,0 +1,11 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+prometheus-client==0.20.0
+pandas==2.2.2
+scikit-learn==1.5.2
+evidently==0.4.40
+diagrams==0.23.4
+confluent-kafka==2.5.3
+psycopg[binary]==3.2.3
+playwright==1.47.0
+requests==2.32.3

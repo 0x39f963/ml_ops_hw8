@@ -1,0 +1,11 @@
+{
+  "baseline_batch": "unchanged holdout batch from sklearn wine",
+  "current_batch": "same feature schema with synthetic drift in 3 numeric columns",
+  "baseline_acc": 0.9861,
+  "current_acc": 0.5972,
+  "delta": -0.3889,
+  "current_f1_macro": 0.5009,
+  "reference_rows": 106,
+  "current_rows": 72,
+  "drift_note": "data drift is visible without labels; degradation uses labelled current batch"
+}

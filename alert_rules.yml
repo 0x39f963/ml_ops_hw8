@@ -1,0 +1,12 @@
+groups:
+  - name: dz8_latency_alerts
+    rules:
+      - alert: HighLatency
+        expr: histogram_quantile(0.95, sum(rate(request_latency_seconds_bucket[5m])) by (le)) > 1
+        for: 2m
+        labels:
+          severity: warning
+          service: dz8-ml-service
+        annotations:
+          summary: High request latency detected
+          description: p95 latency exceeded 1 second for 2 minutes.

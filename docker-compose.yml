@@ -1,0 +1,97 @@
+services:
+  ml_service:
+    build: .
+    container_name: dz8_ml_service
+    ports:
+      - "8000:8000"
+    networks:
+      - dz8net
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: dz8_prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
+    ports:
+      - "9090:9090"
+    networks:
+      - dz8net
+    depends_on:
+      - ml_service
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: dz8_grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_USERS_DEFAULT_THEME: light
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3000:3000"
+    networks:
+      - dz8net
+    depends_on:
+      - prometheus
+
+  postgres:
+    image: postgres:16
+    container_name: dz8_postgres
+    environment:
+      POSTGRES_USER: dz8
+      POSTGRES_PASSWORD: dz8
+      POSTGRES_DB: dz8
+    volumes:
+      - ./sql/init_orders.sql:/docker-entrypoint-initdb.d/init_orders.sql:ro
+    ports:
+      - "5432:5432"
+    networks:
+      - dz8net
+
+  redpanda:
+    image: redpandadata/redpanda:v24.2.7
+    container_name: dz8_redpanda
+    command:
+      - redpanda
+      - start
+      - --overprovisioned
+      - --smp=1
+      - --memory=512M
+      - --reserve-memory=0M
+      - --node-id=0
+      - --check=false
+      - --kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr=internal://redpanda:9092,external://localhost:9092
+    ports:
+      - "9092:19092"
+    networks:
+      - dz8net
+
+  dqops:
+    image: dqops/dqo:1.10.1
+    container_name: dz8_dqops
+    entrypoint:
+      - /bin/sh
+      - -lc
+      - "(printf '%s\\n%s\\n' n y; tail -f /dev/null) | /dqo/home/bin/dqo_docker_entrypoint.sh run"
+    environment:
+      DQO_DOCKER_USER_HOME_ALLOW_UNMOUNTED: "true"
+    volumes:
+      - dqops_userhome:/dqo/userhome
+    ports:
+      - "8888:8888"
+    networks:
+      - dz8net
+    depends_on:
+      - postgres
+
+networks:
+  dz8net:
+    driver: bridge
+
+volumes:
+  dqops_userhome:

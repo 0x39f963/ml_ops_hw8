@@ -1,0 +1,23 @@
+# producer
+delivered to frames partition 0 offset 20
+delivered to frames partition 0 offset 21
+delivered to frames partition 0 offset 22
+delivered to frames partition 0 offset 23
+delivered to frames partition 0 offset 24
+delivered to frames partition 0 offset 25
+delivered to frames partition 0 offset 26
+delivered to frames partition 0 offset 27
+delivered to frames partition 0 offset 28
+delivered to frames partition 0 offset 29
+
+# consumer
+processed frame_id=1 -> processed_frames: {"frame_id": 1, "status": "processed", "brand_inserted": "demo_brand", "latency_ms": 41}
+processed frame_id=2 -> processed_frames: {"frame_id": 2, "status": "processed", "brand_inserted": "demo_brand", "latency_ms": 43}
+processed frame_id=3 -> processed_frames: {"frame_id": 3, "status": "processed", "brand_inserted": "demo_brand", "latency_ms": 35}
+processed frame_id=4 -> processed_frames: {"frame_id": 4, "status": "processed", "brand_inserted": "demo_brand", "latency_ms": 26}
+processed frame_id=5 -> processed_frames: {"frame_id": 5, "status": "processed", "brand_inserted": "demo_brand", "latency_ms": 67}
+processed frame_id=6 -> processed_frames: {"frame_id": 6, "status": "processed", "brand_inserted": "demo_brand", "latency_ms": 35}
+processed frame_id=7 -> processed_frames: {"frame_id": 7, "status": "processed", "brand_inserted": "demo_brand", "latency_ms": 28}
+processed frame_id=8 -> processed_frames: {"frame_id": 8, "status": "processed", "brand_inserted": "demo_brand", "latency_ms": 57}
+processed frame_id=9 -> processed_frames: {"frame_id": 9, "status": "processed", "brand_inserted": "demo_brand", "latency_ms": 31}
+processed frame_id=10 -> processed_frames: {"frame_id": 10, "status": "processed", "brand_inserted": "demo_brand", "latency_ms": 68}
