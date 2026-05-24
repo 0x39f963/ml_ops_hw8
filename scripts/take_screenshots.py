@@ -6,25 +6,25 @@ from playwright.sync_api import Error, TimeoutError, sync_playwright
 
 TARGETS = [
     (
-        "prometheus_targets_up",
+        "auto_prometheus_target",
         "http://localhost:9090/targets",
         "Prometheus targets page. Expected: ml_service target is UP.",
         "networkidle",
     ),
     (
-        "grafana_latency_panel",
+        "auto_grafana_dashboard",
         "http://localhost:3000/d/dz8-ml/dz-8-ml-service?orgId=1&from=now-30m&to=now&kiosk",
         "Grafana dashboard. Expected: p95 latency panel is visible.",
         "networkidle",
     ),
     (
-        "grafana_high_latency_alert",
+        "auto_grafana_alert",
         "http://localhost:3000/alerting/list?orgId=1",
         "Grafana alert list. Expected: HighLatency is Normal/Pending/Firing after slow traffic.",
         "networkidle",
     ),
     (
-        "dqops_incident",
+        "auto_dqops_page",
         "http://localhost:8888",
         "DQOps page. Expected after manual setup: Incidents page with schema incident.",
         "domcontentloaded",
@@ -62,7 +62,7 @@ def main() -> None:
             path = out_dir / f"{name}.png"
             try:
                 page.goto(url, wait_until=wait_until, timeout=args.timeout_ms)
-                page.wait_for_timeout(8000 if name == "dqops_incident" else 1500)
+                page.wait_for_timeout(8000 if name == "auto_dqops_page" else 1500)
             except (Error, TimeoutError) as exc:
                 fallback_page(
                     page,

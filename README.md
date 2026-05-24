@@ -1,22 +1,104 @@
 # ДЗ-8 Monitoring / Observability
 
-Минимальный воспроизводимый стенд для мониторинга ML-сервиса:
+Это учебный стенд для ДЗ-8 по observability ML-сервиса.
 
-- FastAPI ML-service с `/health`, `/predict`, `/metrics`
-- Prometheus target + alert rule `HighLatency`
-- Grafana datasource/dashboard/alert provisioning
-- Evidently drift/degradation reports
-- PostgreSQL + DQOps incident workflow
-- Virtual Product Placement Kappa diagram
-- Redpanda Kafka-compatible stream demo
+Что тут сделано:
 
-## 1. Быстрый запуск
+- маленький FastAPI ML-service с `/health`, `/predict`, `/metrics`
+- Prometheus забирает метрики сервиса
+- Grafana показывает latency / request rate / target up + alert `HighLatency`
+- Evidently строит data drift report и drift tests
+- PostgreSQL + DQOps показывают data quality/schema check
+- Redpanda используется как Kafka-compatible broker для VPP stream demo
+- VPP demo не делает реальное видео, а показывает поток `frames -> processed_frames`
+
+## 1. Где что лежит
+
+Главные файлы:
+
+- ноутбук: `HW8_Monitoring_НовиковИван.ipynb`
+- скриншоты: `screenshots/`
+- отчеты Evidently / VPP: `reports/`
+- docker-стенд: `docker-compose.yml`
+- ML-service: `app.py`
+- Prometheus: `prometheus.yml`, `alert_rules.yml`
+- Grafana provisioning: `grafana/provisioning/`
+- DQOps/PostgreSQL SQL: `sql/`
+- VPP scripts: `scripts/vpp_producer.py`, `scripts/vpp_consumer.py`
+
+Структура папки:
+
+```text
+DZ8/
+  README.md
+  HW8_Monitoring_НовиковИван.ipynb
+  requirements.txt
+  Dockerfile
+  Makefile
+  app.py
+  docker-compose.yml
+  prometheus.yml
+  alert_rules.yml
+  grafana/
+    provisioning/
+      datasources/
+        prometheus.yaml
+      dashboards/
+        dashboards.yaml
+        dashboard-dz8-ml-service.json
+      alerting/
+        alert_rules.yaml
+        contact_points.yaml
+        notification_policies.yaml
+  scripts/
+    smoke_requests.py
+    generate_drift_report.py
+    create_vpp_diagram.py
+    create_topics.py
+    take_screenshots.py
+    vpp_producer.py
+    vpp_consumer.py
+  sql/
+    init_orders.sql
+    break_orders_schema.sql
+  reports/
+    data_drift_report.html
+    data_drift_tests.html
+    degradation_metrics.json
+    vpp_architecture.png
+    vpp_stream_demo.log
+  screenshots/
+    1.png
+    ...
+    13.png
+```
+
+## 2. Запуск
+
+Сначала Python-зависимости:
 
 ```bash
-cd DZ8
+python3 -m venv .venv
+.venv/bin/pip install --upgrade pip
+.venv/bin/pip install -r requirements.txt
+.venv/bin/python -m playwright install chromium
+```
+
+Потом контейнеры:
+
+```bash
 docker compose up -d
 docker compose ps
 ```
+
+Ожидаемо поднимаются:
+
+- `dz8_ml_service` - FastAPI сервис
+- `dz8_prometheus` - сбор метрик
+- `dz8_grafana` - dashboard + alerts
+- `dz8_postgres` - demo-таблица `customer_orders`
+- `dz8_dqops` - data quality UI
+- `dz8_redpanda` - Kafka-compatible broker для VPP
 
 Порты:
 
@@ -29,80 +111,53 @@ docker compose ps
 | Redpanda Kafka API | `localhost:9092` |
 | PostgreSQL | `localhost:5432` |
 
-Grafana anonymous access включен, dashboard уже импортирован:
+## 3. YAML-конфиги
+
+Тут почти все настраивается файлами, без кликов в UI.
+
+- `prometheus.yml` - говорит Prometheus, что надо scrape-ить `ml_service:8000/metrics`
+- `alert_rules.yml` - правило `HighLatency`, т.е. p95 latency выше порога
+- `grafana/provisioning/datasources/prometheus.yaml` - подключает Prometheus как datasource
+- `grafana/provisioning/dashboards/dashboards.yaml` - подхватывает dashboard при старте Grafana
+- `grafana/provisioning/dashboards/dashboard-dz8-ml-service.json` - сам dashboard
+- `grafana/provisioning/alerting/alert_rules.yaml` - Grafana alert rule
+- `grafana/provisioning/alerting/contact_points.yaml` - demo contact point
+- `grafana/provisioning/alerting/notification_policies.yaml` - demo routing для alert
+
+То есть схема такая:
 
 ```text
-http://localhost:3000/d/dz8-ml/dz-8-ml-service
+docker compose up
+  -> ml_service отдает /metrics
+  -> prometheus.yml забирает метрики
+  -> Grafana provisioning подключает datasource/dashboard/alert
+  -> slow-запросы поднимают p95 latency
+  -> HighLatency переходит в firing
 ```
 
-## 2. Python scripts
-
-```bash
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-.venv/bin/python -m playwright install chromium
-```
-
-Для диаграммы нужен system Graphviz (`dot`). Если на машине нет `dot`, можно собрать PNG через Docker:
-
-```bash
-docker run --rm -v "$PWD":/work -w /work python:3.11-slim \
-  sh -lc "apt-get update >/dev/null && apt-get install -y graphviz >/dev/null && pip install -q diagrams==0.23.4 && python scripts/create_vpp_diagram.py"
-```
-
-## 3. Проверки
+## 4. Проверка сервиса и метрик
 
 Smoke:
 
 ```bash
 .venv/bin/python scripts/smoke_requests.py
-curl -s http://localhost:8000/metrics | grep request_latency_seconds_bucket
+curl -s http://localhost:8000/health
+curl -s http://localhost:8000/metrics | grep request_latency_seconds_bucket | head
 ```
 
-Prometheus target:
+Главная метрика latency:
 
-```bash
-open http://localhost:9090/targets
+```promql
+histogram_quantile(0.95, sum(rate(request_latency_seconds_bucket[5m])) by (le))
 ```
 
-Alert:
+Alert rule:
 
-```bash
-for i in $(seq 1 30); do
-  curl -s -X POST http://localhost:8000/predict \
-    -H "Content-Type: application/json" \
-    -d '{"features":[1,2,3],"slow":true}' >/dev/null
-done
-sleep 150
-open http://localhost:3000/alerting/list
+```promql
+histogram_quantile(0.95, sum(rate(request_latency_seconds_bucket[5m])) by (le)) > 1
 ```
 
-Drift/degradation:
-
-```bash
-.venv/bin/python scripts/generate_drift_report.py
-```
-
-VPP stream demo:
-
-```bash
-.venv/bin/python scripts/create_topics.py
-tmp_p=$(mktemp); tmp_c=$(mktemp)
-.venv/bin/python scripts/vpp_consumer.py --count 10 > "$tmp_c" 2>&1 & pid=$!
-sleep 3
-.venv/bin/python scripts/vpp_producer.py --count 10 > "$tmp_p" 2>&1
-wait $pid
-{ echo '# producer'; cat "$tmp_p"; echo; echo '# consumer'; cat "$tmp_c"; } > reports/vpp_stream_demo.log
-rm -f "$tmp_p" "$tmp_c"
-```
-
-Screenshots:
-
-```bash
-.venv/bin/python scripts/take_screenshots.py
-```
-
-## 4. Метрики и SLO
+## 5. Метрики и SLO
 
 | branch | metric | SLI | SLO | owner | action |
 |---|---|---|---|---|---|
@@ -114,30 +169,72 @@ Screenshots:
 | ML/model | degradation | accuracy/F1 on labelled batch | not worse than baseline by agreed delta | DS | retrain / rollback |
 | data quality | DQ incidents | DQOps critical incidents | `0 critical` | data engineer | fix source / backfill / isolate |
 
-Основной alert в стенде:
+**Вывод:**
 
-```promql
-histogram_quantile(0.95, sum(rate(request_latency_seconds_bucket[5m])) by (le)) > 1
+- p95 latency беру как основной технический SLO
+- drift/degradation отдельно, т.к. сервис может быть быстрый, но модель уже плохая
+- DQOps отдельно, т.к. сломанная схема данных может поломать модель до inference
+
+## 6. Скриншоты
+
+Все новые скриншоты лежат в `screenshots/`.
+
+`1.png` и `2.png` - это setup evidence. Они не доказывают сами метрики, но показывают что окружение и зависимости поставлены.
+
+### 6.1 Setup и запуск стенда
+
+![setup venv](screenshots/1.png)
+
+`1.png` - создан `.venv`, обновлен `pip`, запускается установка зависимостей и Playwright Chromium.
+
+![pip dependencies](screenshots/2.png)
+
+`2.png` - зависимости установились: FastAPI / prometheus-client / Evidently / psycopg / confluent-kafka и т.д.
+
+![docker compose ps](screenshots/3.png)
+
+`3.png` - поднят весь compose-стенд: ML-service, Prometheus, Grafana, PostgreSQL, DQOps, Redpanda.
+
+### 6.2 FastAPI / Prometheus / Grafana
+
+![fastapi metrics](screenshots/4.png)
+
+`4.png` - smoke-запросы прошли, `/health` отвечает `ok`, `/metrics` отдает `request_latency_seconds_bucket`.
+
+![prometheus target](screenshots/5.png)
+
+`5.png` - Prometheus видит target `ml_service` как `UP`, endpoint `/metrics` scrape-ится без ошибки.
+
+![grafana dashboard](screenshots/6.png)
+
+`6.png` - Grafana dashboard: p95 latency, request rate, target `UP`, drift proxy metric.
+
+![grafana alert rules](screenshots/7.png)
+
+`7.png` - в Grafana видны provisioned alert rules, оба правила в состоянии `firing`.
+
+![grafana high latency firing](screenshots/8.png)
+
+`8.png` - правило `HighLatency` реально перешло в `Firing for 3m` после slow-запросов.
+
+### 6.3 Evidently drift / degradation
+
+Запуск:
+
+```bash
+.venv/bin/python scripts/generate_drift_report.py
+cat reports/degradation_metrics.json
 ```
 
-## 5. Evidence
+![evidently tests](screenshots/10.png)
 
-| block | artifact |
-|---|---|
-| FastAPI metrics | `app.py`, `/metrics`, `request_latency_seconds_bucket` |
-| Prometheus | `prometheus.yml`, `alert_rules.yml`, `screenshots/prometheus_targets_up.png` |
-| Grafana | `grafana/provisioning/**`, `screenshots/grafana_latency_panel.png`, `screenshots/grafana_high_latency_alert.png` |
-| Drift | `reports/data_drift_report.html`, `reports/data_drift_tests.html` |
-| Degradation | `reports/degradation_metrics.json` |
-| DQOps | `docker-compose.yml`, `sql/init_orders.sql`, `sql/break_orders_schema.sql`, `screenshots/dqops_incident.png` |
-| VPP architecture | `scripts/create_vpp_diagram.py`, `reports/vpp_architecture.png` |
-| VPP stream | `scripts/vpp_producer.py`, `scripts/vpp_consumer.py`, `reports/vpp_stream_demo.log` |
+`10.png` - Evidently test suite: 14 tests, 9 success, 5 fail; drift найден в части признаков.
 
-## 6. Drift/degradation result
+![evidently dataset drift](screenshots/11.png)
 
-`scripts/generate_drift_report.py` использует `sklearn.datasets.load_wine`.
+`11.png` - Evidently dataset drift report: drift detected, 11 из 13 признаков drifted.
 
-Текущий результат:
+Метрики degradation:
 
 ```json
 {
@@ -147,17 +244,72 @@ histogram_quantile(0.95, sum(rate(request_latency_seconds_bucket[5m])) by (le)) 
 }
 ```
 
-Data drift показывается без labels через Evidently. Degradation считается отдельно на labelled current batch: качество заметно падает после synthetic shift.
+**Вывод:**
 
-## 7. DQOps incident flow
+- `data drift` видно без labels
+- `degradation` считаю отдельно по labelled batch
+- current batch специально сдвинут, т.е. это demo-стресс для ДЗ
 
-В compose DQOps запинен на `dqops/dqo:1.10.1`. Причина: `dqops/dqo:latest` на момент проверки стартует как v1.13.1 и требует license key в headless-режиме, что ломает учебный `docker compose up -d` без секретов.
+### 6.4 DQOps / PostgreSQL
 
-Проверка:
+PostgreSQL стартует с таблицей `public.customer_orders` из `sql/init_orders.sql`.
 
-1. `docker compose up -d`
-2. открыть `http://localhost:8888`
-3. добавить PostgreSQL source:
+Controlled incident:
+
+```bash
+docker exec -i dz8_postgres psql -U dz8 -d dz8 < sql/break_orders_schema.sql
+```
+
+![dqops check](screenshots/12.png)
+
+`12.png` - в DQOps включен schema monitoring check `daily_column_count_changed` для таблицы `customer_orders`.
+
+Важно: на этом скрине видно настройку проверки, а не весь incident-list. Поэтому SQL mutation лежит отдельно в `sql/break_orders_schema.sql`: там колонка `total_amount` переименуется в `total_amount_broken`.
+
+### 6.5 Virtual Product Placement / Redpanda stream
+
+Диаграмма архитектуры:
+
+![vpp architecture](reports/vpp_architecture.png)
+
+Идея VPP тут такая:
+
+```text
+video/frame events
+  -> frames topic
+  -> consumer имитирует ML processing
+  -> processed_frames topic
+```
+
+![processed frame](screenshots/9.png)
+
+`9.png` - пример обработанного demo-frame. Сам по себе он слабый как доказательство Kafka, поэтому рядом идет лог producer/consumer.
+
+![vpp stream log](screenshots/13.png)
+
+`13.png` - producer отправляет 10 событий в topic `frames`, consumer читает их и пишет результаты в `processed_frames`.
+
+Лог сохраняется тут:
+
+```text
+reports/vpp_stream_demo.log
+```
+
+## 7. Отчеты
+
+| файл | зачем |
+|---|---|
+| `reports/data_drift_report.html` | Evidently report по data drift |
+| `reports/data_drift_tests.html` | Evidently test suite |
+| `reports/degradation_metrics.json` | accuracy/f1 до и после synthetic drift |
+| `reports/vpp_architecture.png` | схема Virtual Product Placement |
+| `reports/vpp_stream_demo.log` | producer/consumer лог Redpanda demo |
+
+## 8. DQOps flow руками
+
+1. открыть `http://localhost:8888`
+2. добавить PostgreSQL source
+3. параметры:
 
 | field | value |
 |---|---|
@@ -170,47 +322,44 @@ Data drift показывается без labels через Evidently. Degradat
 4. импортировать `public.customer_orders`
 5. включить profiling/schema checks
 6. run checks
-7. применить mutation:
+7. применить `sql/break_orders_schema.sql`
+8. run checks еще раз
+9. смотреть Incidents / failed checks
+
+## 9. VPP stream demo
 
 ```bash
-docker exec -i dz8_postgres psql -U dz8 -d dz8 < sql/break_orders_schema.sql
+.venv/bin/python scripts/create_topics.py
+
+tmp_p=$(mktemp)
+tmp_c=$(mktemp)
+
+.venv/bin/python scripts/vpp_consumer.py --count 10 > "$tmp_c" 2>&1 & pid=$!
+sleep 3
+.venv/bin/python scripts/vpp_producer.py --count 10 > "$tmp_p" 2>&1
+wait $pid
+
+{ echo '# producer'; cat "$tmp_p"; echo; echo '# consumer'; cat "$tmp_c"; } > reports/vpp_stream_demo.log
+rm -f "$tmp_p" "$tmp_c"
+cat reports/vpp_stream_demo.log
 ```
 
-8. run checks снова
-9. открыть Incidents
+**Итого по VPP:**
 
-После mutation колонка `total_amount` переименуется в `total_amount_broken`. Это controlled schema incident: контракт таблицы сломан, DQOps должен показать проблему после повторного check-run.
+- Redpanda тут как Kafka-compatible broker
+- topic `frames` - входящие события кадров
+- topic `processed_frames` - результат обработки
+- реального YOLO/inpainting нет, это demo-only
 
-Сброс:
-
-```bash
-docker compose down -v
-docker compose up -d
-```
-
-## 8. Virtual Product Placement
-
-Выбрана Kappa architecture:
-
-- входной video stream режется на кадры / micro-batches
-- Kafka-compatible broker хранит event log
-- detector + placement policy выбирают slot/brand
-- generative renderer/inpainting вставляет бренд
-- moderation / brand-safety gate блокирует плохие результаты
-- processed frames topic идет в packager -> CDN/player
-- Prometheus/Grafana + drift/DQ checks смотрят latency/lag/failures/input quality
-
-Redpanda здесь не production video runtime. Это маленькое доказательство stream-подхода: producer пишет frame events в `frames`, consumer имитирует ML processing и пишет в `processed_frames`.
-
-## 9. Что demo-only
+## 10. Что demo-only
 
 - нет настоящего YOLO/video inference
-- нет MLflow server, т.к. revised ТЗ убрало MLflow runtime из scope
+- нет MLflow server, в revised scope он не поднимается
 - нет Redis/MinIO/Dagster/Feast
 - нет Schema Registry / Avro / exactly-once
-- DQOps incident требует ручной UI-flow, потому что это часть задания и UI-зависимая проверка
+- DQOps incident частично ручной, т.к. UI-flow в DQOps удобнее показать руками
 
-## 10. Teardown
+## 11. Остановить стенд
 
 ```bash
 docker compose down -v
