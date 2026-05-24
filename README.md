@@ -10,29 +10,7 @@
 - Virtual Product Placement Kappa diagram
 - Redpanda Kafka-compatible stream demo
 
-## 1. Как проверять по критериям
-
-| критерий | максимум | где смотреть |
-|---|---:|---|
-| Бизнес- и технические метрики | 2 | ноутбук: раздел 1, README: `Метрики и SLO` |
-| Prometheus / Grafana / ML monitoring | 2 | `app.py`, `prometheus.yml`, `grafana/provisioning/`, screenshots Prometheus/Grafana |
-| Drift / degradation | 2 | `scripts/generate_drift_report.py`, `reports/data_drift_report.html`, `reports/degradation_metrics.json` |
-| Data Quality Ops | 2 | `docker-compose.yml`, `sql/*.sql`, `screenshots/dqops_incident.png` |
-| Virtual Product Placement | 2 | `reports/vpp_architecture.png`, `scripts/vpp_producer.py`, `scripts/vpp_consumer.py`, `reports/vpp_stream_demo.log` |
-
-Итоговый ноутбук: `HW8_Monitoring_НовиковИван.ipynb`.
-
-Что в нем сделано:
-
-1. сначала идет дерево метрик / SLO
-2. потом Prometheus + Grafana configs
-3. дальше Evidently drift + degradation
-4. отдельно DQOps incident через PostgreSQL
-5. в конце VPP architecture + stream demo на Redpanda
-
-Скриншоты уже лежат в `screenshots/`. Их можно переснять через `scripts/take_screenshots.py`, если надо обновить evidence после локального запуска.
-
-## 2. Быстрый запуск
+## 1. Быстрый запуск
 
 ```bash
 cd DZ8
@@ -57,7 +35,7 @@ Grafana anonymous access включен, dashboard уже импортирова
 http://localhost:3000/d/dz8-ml/dz-8-ml-service
 ```
 
-## 3. Python scripts
+## 2. Python scripts
 
 ```bash
 python3 -m venv .venv
@@ -72,7 +50,7 @@ docker run --rm -v "$PWD":/work -w /work python:3.11-slim \
   sh -lc "apt-get update >/dev/null && apt-get install -y graphviz >/dev/null && pip install -q diagrams==0.23.4 && python scripts/create_vpp_diagram.py"
 ```
 
-## 4. Проверки
+## 3. Проверки
 
 Smoke:
 
@@ -124,7 +102,7 @@ Screenshots:
 .venv/bin/python scripts/take_screenshots.py
 ```
 
-## 5. Метрики и SLO
+## 4. Метрики и SLO
 
 | branch | metric | SLI | SLO | owner | action |
 |---|---|---|---|---|---|
@@ -142,7 +120,7 @@ Screenshots:
 histogram_quantile(0.95, sum(rate(request_latency_seconds_bucket[5m])) by (le)) > 1
 ```
 
-## 6. Evidence
+## 5. Evidence
 
 | block | artifact |
 |---|---|
@@ -155,7 +133,7 @@ histogram_quantile(0.95, sum(rate(request_latency_seconds_bucket[5m])) by (le)) 
 | VPP architecture | `scripts/create_vpp_diagram.py`, `reports/vpp_architecture.png` |
 | VPP stream | `scripts/vpp_producer.py`, `scripts/vpp_consumer.py`, `reports/vpp_stream_demo.log` |
 
-## 7. Drift/degradation result
+## 6. Drift/degradation result
 
 `scripts/generate_drift_report.py` использует `sklearn.datasets.load_wine`.
 
@@ -171,7 +149,7 @@ histogram_quantile(0.95, sum(rate(request_latency_seconds_bucket[5m])) by (le)) 
 
 Data drift показывается без labels через Evidently. Degradation считается отдельно на labelled current batch: качество заметно падает после synthetic shift.
 
-## 8. DQOps incident flow
+## 7. DQOps incident flow
 
 В compose DQOps запинен на `dqops/dqo:1.10.1`. Причина: `dqops/dqo:latest` на момент проверки стартует как v1.13.1 и требует license key в headless-режиме, что ломает учебный `docker compose up -d` без секретов.
 
@@ -210,7 +188,7 @@ docker compose down -v
 docker compose up -d
 ```
 
-## 9. Virtual Product Placement
+## 8. Virtual Product Placement
 
 Выбрана Kappa architecture:
 
@@ -224,7 +202,7 @@ docker compose up -d
 
 Redpanda здесь не production video runtime. Это маленькое доказательство stream-подхода: producer пишет frame events в `frames`, consumer имитирует ML processing и пишет в `processed_frames`.
 
-## 10. Что demo-only
+## 9. Что demo-only
 
 - нет настоящего YOLO/video inference
 - нет MLflow server, т.к. revised ТЗ убрало MLflow runtime из scope
@@ -232,7 +210,7 @@ Redpanda здесь не production video runtime. Это маленькое д�
 - нет Schema Registry / Avro / exactly-once
 - DQOps incident требует ручной UI-flow, потому что это часть задания и UI-зависимая проверка
 
-## 11. Teardown
+## 10. Teardown
 
 ```bash
 docker compose down -v
