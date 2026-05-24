@@ -93,6 +93,8 @@ docker exec -i dz8_postgres psql -U dz8 -d dz8 < sql/break_orders_schema.sql
 
 Для VPP сделал не тяжелую видеообработку, а маленькую проверку стрим-подхода:
 
+![схема VPP](../reports/vpp_architecture.png)
+
 ```text
 producer -> frames -> consumer -> processed_frames
 ```
